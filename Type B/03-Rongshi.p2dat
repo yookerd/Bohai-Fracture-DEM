@@ -1,0 +1,6 @@
+restore 02-FJ-SJ-bond_Add
+
+ball delete range ...
+             cylinder end1 -0.012 -0.012 end2 0.012 0.012  radius 0.0004
+
+save 03-Rongshi

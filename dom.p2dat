@@ -1,0 +1,309 @@
+
+def get_dom_mem ; 返回指向新域对象的指针
+  pnt =  memory.create(dom_size)
+  if pnt = null
+  ;;内存分配失败提示内存不可用。
+    error = 'memory unavailable for domain item'
+  endif
+  memory(pnt)    = dom_head  ;
+  dom_head    = pnt
+  memory(pnt+1)  = null
+  get_dom_mem = pnt
+end
+def dom_scan ;创建流域(球之间的空隙列表)
+;--- 流域对象的条目数目 ---
+   dom_size = 8   
+;--- 流域对象的条目的偏移量 ...
+   DOM_LINK      = 0 ;  存储地址
+   DOM_BALL_LIST = 1 ;  指向流域的球列表
+                     ;  (双精度对象列表 (LINK,B_POINT) )
+   DOM_X         = 2 ;  域中心X坐标(不自动更新)
+   DOM_Y         = 3 ;  域中心Y坐标
+   DOM_PRESS     = 4 ;  流域压力
+   DOM_VSUM      = 5 ;  总流体体积
+   DOM_VOL       = 6 ;  当前流体体积
+   DOM_FIX       = 7 ;  约束标志 (=1 固定流压)
+   dom_head      = null
+;--- Number of items in flow object (extension to contact) ---
+   flow_size     = 5
+   
+   FLOW_DOM1     = 1 ;  指向 domain 1
+   FLOW_DOM2     = 2 ;  指向 domain 2
+   FLOW_AP_ZERO  = 3 ;  残余裂隙宽度
+   FLOW_PERM     = 4 ;  渗透常数
+   FLOW_ACTIVE   = 5 ;  = 1 管道激活; else 0
+;--- Symbols for domain offsets ...
+;--- (domains scan won't work if dead ends exist)
+   zap_dead_ends
+;--- Initialize container to store domain links ---
+;    #1 = D pointer corresponding to path B1->B2
+;    #2 = D pointer corresponding to path B2->B1
+   n=0
+   loop foreach local cp contact.list
+      contact.extra(cp,FLOW_DOM1)    = null
+      contact.extra(cp,FLOW_DOM2)    = null
+      contact.extra(cp,FLOW_AP_ZERO) = 0.0
+      contact.extra(cp,FLOW_PERM)    = 0.0
+      contact.extra(cp,FLOW_ACTIVE)  = 0  
+      n=n+1     
+   endloop  
+
+   scan_all_contacts ; (do twice, to get both senses)  
+   scan_all_contacts
+   pnt = dom_head    ; Mark the outer domain
+   count_max    = 0
+   outer_domain = null
+   loop while pnt # null
+     count = 0
+     bp = memory(pnt+1)
+     loop while bp # null
+       count = count + 1
+       bp    = memory(bp)       
+     endLoop
+     if count > count_max
+       count_max = count
+       outer_domain = pnt
+     endif
+     pnt = memory(pnt)
+   endLoop
+   oo = io.out('Outer domain has '+string(count_max)+' balls')
+end
+def domains ; Domain printout
+   count = 0
+   pnt = dom_head
+   loop while pnt # null
+     if pnt # outer_domain
+       count = count + 1
+       oo=io.out(' Domain '+string(count)+'.  Balls are ...')
+       iadd = memory(pnt+1)
+       loop while iadd # null
+         oo = io.out('      '+string(ball.id(memory(iadd+1))))
+         iadd = memory(iadd)
+       endloop
+     endif
+     pnt = memory(pnt)
+   endloop
+   domains = count
+end
+def scan_all_contacts
+;--- Scan contacts, to form domains ---
+   cpstart = contact_head   
+   loop foreach cpstart contact.list('ball-ball')  ;;;
+    section
+       cp = cpstart
+       b1 = contact.end1(cp)   ;;
+       b2 = contact.end2(cp)   ;;
+       c1=contact.extra(cp,FLOW_DOM1)
+       c2=contact.extra(cp,FLOW_DOM2)      
+       if contact.extra(cp,FLOW_DOM2) # null  ; 
+          if contact.extra(cp,FLOW_DOM1) # null ;
+              exit section     ;
+            else                ;            
+            bstart = b2      ;
+            va1 = contact.normal.x(cp)
+            va2 = contact.normal.y(cp)  ;
+            dom_pnt = get_dom_mem       ;
+            contact.extra(cp,FLOW_DOM1) = dom_pnt  ;
+           endif
+       else           ;
+            bstart = b1     ;       
+            va1 = -contact.normal.x(cp)  ;          
+            va2 = -contact.normal.y(cp)
+           dom_pnt = get_dom_mem   
+           contact.extra(cp,FLOW_DOM2) = dom_pnt  ;       
+         endif        
+       b2 = bstart
+       loop nnn (1,1000)      ; (hope outer domain < 1000 balls)
+;--- scan contacts on next ball for max angle      
+         max_angle = -1e20
+         cp_next   = null
+         next_ball = null        
+         loop foreach _cp ball.contactmap(b2)   ;       
+           _b1 = contact.end1(_cp)
+           _b2 = contact.end2(_cp)                    
+           nn=contact.active(_cp)                   
+           if _cp # cp             ; 
+               if _b1 = b2           ;
+                 vb1  = contact.normal.x(_cp)
+                 vb2  = contact.normal.y(_cp)
+                 next_poss = _b2     ;
+                  flag = 1
+               else
+                 vb1  = -contact.normal.x(_cp)
+                 vb2  = -contact.normal.y(_cp)
+                 next_poss = _b1
+                 flag = 0
+               endif
+               cc   = va1 * vb2 - va2 * vb1   ; dot product
+               maga = math.sqrt(va1*va1 + va2*va2)
+               na1 = va1 / maga
+               na2 = va2 / maga  
+               bb  = vb1 * na1 + vb2 * na2    ; 
+               dthet = math.atan2(math.abs(cc),bb^2)    ;
+               if cc > 0.0
+                 if bb < 0.0
+                   dthet = math.pi - dthet
+                 endif
+               else
+                 if bb > 0.0
+                   dthet = - dthet
+                 else
+                   dthet = dthet - math.pi
+                 endif
+               endif
+               if dthet > max_angle
+                 max_angle = dthet
+                 cp_next   = _cp
+                 next_ball = next_poss
+                 v1sav = vb1
+                 v2sav = vb2
+                 flagsav = flag
+               endif
+             endif              
+         endLoop       
+         if cp_next # null
+         if flagsav = 1
+           contact.extra(cp_next,FLOW_DOM1) = dom_pnt
+         else
+           contact.extra(cp_next,FLOW_DOM2) = dom_pnt
+         endif
+         add_ball_to_domain
+         if next_ball = bstart
+           exit section
+         endif
+         b2   = next_ball
+         cp   = cp_next
+         va1  = v1sav
+         va2  = v2sav
+         endif
+       end_loop
+;--- end of main contact scan ---   
+     endsection
+   endLoop
+end
+def zap_dead_ends
+;--- Eliminate balls with one or less contacts ---
+   num_zapped = 0
+   loop foreach local ball ball.list    
+    local contactmap = ball.contactmap(ball) 
+    local size = map.size(contactmap)
+    if size <= 1 then      
+      num_zapped = num_zapped +1
+      ball.delete(ball)
+    endif
+  endloop  
+   if num_zapped > 0
+     oo =io.out('Number of balls removed = '+string(num_zapped))
+   else
+     exit
+   endif  
+end
+def add_ball_to_domain
+;INPUT: dom_pnt, next_ball
+  pnt = memory.create(2)
+  if pnt = null
+    error = 'no memory for ball double'
+  endif
+  memory(pnt) = memory(dom_pnt+1)
+  memory(dom_pnt+1) = pnt
+  memory(pnt+1) = next_ball
+end
+def set_dom_coords ; set coordinates for domain centers
+; INPUT: dom = domain pointer
+   iadd = memory(dom+DOM_BALL_LIST)
+   xav   = 0.0
+   yav   = 0.0
+   count = 0
+   loop while iadd # null
+     bp    = memory(iadd+1)
+     xav   = xav + ball.pos.x(bp)
+     yav   = yav + ball.pos.y(bp)
+     count = count + 1
+     iadd = memory(iadd)
+   endloop
+   xav = xav / count
+   yav = yav / count
+   memory(dom+DOM_X) = xav ; side-effect!
+   memory(dom+DOM_Y) = yav
+end
+def dom_item
+   array vec(2) v1(2) v2(2)
+   command 
+     set echo off
+   endcommand
+    rmin000=100000.
+   loop foreach bp ball.list
+       rr=ball.radius(bp)
+       if rr<rmin000
+            rmin000=rr
+       endif
+   endloop
+   num_d=0
+   pnt=dom_head
+   loop while pnt # null
+      if pnt # outer_domain
+          num_d=num_d+1
+          dom=pnt
+          set_dom_coords
+          vec(1)=memory(pnt+dom_x)
+          vec(2)=memory(pnt+dom_y)
+          command
+             geometry generate circle position [vector(vec)] radius [rmin000*0.4] 
+          endcommand
+          oo =io.out('Number of domains = '+string(num_d))          
+      endif
+      pnt=memory(pnt)
+   endloop
+   oo =io.out('Number of domains last= '+string(num_d))  
+   loop foreach cp contact.list
+        b1=contact.end1(cp)
+        b2=contact.end2(cp)
+        v1(1)=ball.pos.x(b1)
+        v1(2)=ball.pos.y(b1)
+        v2(1)=ball.pos.x(b2)
+        v2(2)=ball.pos.y(b2)
+        command           
+           geometry edge [vector(v1)] [vector(v2)] group 'contact'
+        endcommand         
+        if contact.extra(cp,flow_active) = 1
+            dom1=contact.extra(cp,flow_dom1)
+            dom2=contact.extra(cp,flow_dom2)
+            command
+               list @dom1 @dom2
+            endcommand
+            if dom1 # null
+                v1(1)=memory(dom1+2)
+                v1(2)=memory(dom1+3)
+                v2(1)=memory(dom2+2)
+                v2(2)=memory(dom2+3)
+                oo=io.out(string(v1(1))+string(v1(2))+string(v2(1))+string(v2(2)))
+                command                     
+                    geometry edge [vector(v1)] [vector(v2)] group 'domain'
+                endcommand
+            endif
+        endif
+   endloop 
+   
+   command
+      set echo on
+   endcommand   
+end
+def set_active_flag ; ... on contacts for which flow is calculated   
+   loop foreach cp contact.list
+     dom1 = contact.extra(cp,FLOW_DOM1)
+     dom2 = contact.extra(cp,FLOW_DOM2)
+     if dom1 # null
+       if dom2 # null
+         if dom1 # outer_domain
+           if dom2 # outer_domain
+             contact.extra(cp,FLOW_ACTIVE) = 1
+           endif
+         endif
+       endif
+     endif
+   endloop
+end
+@dom_scan
+@set_active_flag
+@dom_item
+save dom

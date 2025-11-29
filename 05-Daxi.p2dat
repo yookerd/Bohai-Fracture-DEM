@@ -1,0 +1,54 @@
+; "Darcy" flow test  - FISH formulation
+;call soft_servo
+
+restore 04-Dakong
+
+wall delete walls
+
+def basic_parameters1
+  loading_rate=1e-5
+  xishu_e=(2.7333*math.log(loading_rate/1e-5)+24.14)/17.114
+  xishu_s=(14.317*math.log(loading_rate/1e-5)+139.37)/133.09
+  emod_max=50e9
+  pb_emod_max=50e9
+  pb_ten_m=9e7
+  pb_ten_c=3e7
+end
+@basic_parameters1
+
+call crack_num.p2dat
+@track_init
+call dom
+call dom1
+;set fish callback  9.0 @flow_run
+set @ap_zero=1.0 @perm=0.1 @gap_mul=0.0 @fap_zero=1e8
+set @bulk_w=100.  @flow_dt=0.001
+@flow_props
+ball group 'boundary_balls' range x -0.027 -0.023
+ball group 'boundary_balls' range x 0.023 0.027
+ball group 'boundary_balls' range y -0.027 -0.023
+ball group 'boundary_balls' range y 0.023 0.027
+ball attribute velocity multiply 0.0
+ball fix velocity rang group boundary_balls
+;set @flow_set=1 @x1_bc=-1.0 @x2_bc=1.0 @y1_bc=0.47 @y2_bc=0.55
+;@flow_bc
+;set @flow_set=1
+;set @flow_set=5
+set @flow_set=1
+@flow_bc_circle(0.0,0.0,0.004)
+set @flow_set=3 @p_given=15e6
+@flow_bc_circle(0.0,0.0,0.004)
+set @gap_mul=0.2
+set timestep max 1e-6
+set mech age 0.0
+[time111=mech.age]
+hist id 1 @time111
+hist id 2 @dddtime
+hist id 3 @crack_num
+;hist id 3 @time_now
+plot create plot 'aaa'
+plot add hist 1 2 
+
+cycle 40000
+
+save darcy_test

@@ -1,0 +1,94 @@
+restore 01-SET
+
+def contact_parameters
+    rock_emod_Contact=5.0e9
+    rock_kratio_Contact=0.61
+    rock_ten_Contact=3.07e6
+    rock_cohesion_Contact=81.00e7;81.00e6
+    rock_fa_Contact=26.56505118
+    rock_gap_contact=0.004*L1
+    rock_fric_Contact=0.5
+    
+    sandstone_emod_Contact=4.15e9
+    sandstone_kratio_Contact=0.95
+    sandstone_ten_Contact=2.54e6
+    sandstone_cohesion_Contact=34.76e6
+    sandstone_fa_Contact=26.56505118
+    sandstone_gap_contact=0.004*L1
+    sandstone_fric_Contact=0.5
+    
+    Dfn_kn_sj=280e9
+    Dfn_ks_sj=260e9
+    Dfn_fric_sj=0.7
+    Dfn_fa_sj=60
+    Dfn_coh_sj=4.3e6
+    Dfn_ten_sj=5.2e6
+    Dfn_large_sj=1
+    Dfn_gap_contact=0.004*L1
+    
+end
+    @contact_parameters
+
+contact groupbehavior and
+cmat default type ball-ball ...
+                  model smoothjoint ...
+                  property sj_kn [Dfn_kn_sj] ...
+                  sj_ks [Dfn_ks_sj] ...
+                  sj_fric [Dfn_fric_sj] ...
+                  sj_coh [Dfn_coh_sj] ...
+                  sj_ten [Dfn_ten_sj] ...
+                  sj_large [Dfn_large_sj]
+contact method bond gap [Dfn_gap_contact]
+cmat default type ball-facet ...
+             model  linear ...
+             method deform emod [rock_emod_Contact] kratio [rock_kratio_Contact] ...
+             property fric 0.0 dp_nratio 0.0 dp_sratio 0.0 
+
+cmat add 1   model flatjoint ...
+             method deform emod [rock_emod_Contact] ...
+             kratio [rock_kratio_Contact] ...
+             method bond gap [rock_gap_contact] ...
+             property fj_fric [rock_fric_Contact]  ... 
+             fj_fa [rock_fa_Contact] ...
+             fj_coh [rock_cohesion_Contact] ...
+             fj_ten [rock_ten_Contact] ...
+             range group 'rock'
+cmat apply
+
+
+cmat add 2   model flatjoint ...
+             method deform emod [sandstone_emod_Contact] ...
+             kratio [sandstone_kratio_Contact] ...
+             method bond gap 0.0 ...
+             property fj_fric 0.0  ...
+              fj_fa [sandstone_fa_Contact] ...
+              fj_coh [sandstone_cohesion_Contact] ...
+              fj_ten [sandstone_ten_Contact] ...
+              range group 'tianchong'
+
+cmat apply
+ 
+contact property lin_force 0.0 0.0 lin_mode 1
+
+ball attribute contactforce multiply 0.0 contactmoment multiply 0.0
+
+cycle 1
+solve aratio 1e-5 max_cycles 1000000
+
+cycle 1
+solve aratio 1e-5 max_cycles 1000000
+save 02-FJ-SJ-bond_Add
+return
+
+
+
+
+
+
+
+
+
+
+
+
+    

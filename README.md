@@ -1,64 +1,170 @@
 # Bohai-Fracture-DEM
 Input files and scripts for DEM/PFC modeling of fracture effectiveness in buried-hill reservoirs.
 
-1. Project Files and Call Structure
-This PFC2D project consists of a set of .p2dat scripts for building a bonded-particle rock sample, applying Darcy-type flow, and tracking fracture evolution. The main scripts and their roles are summarized below.
 
-DOALL.p2dat：	Master control script. Calls the geometry, contact, rock-state and cavity scripts in sequence.
+Program name:
+PFC2D Darcy Flow and Hydraulic Fracture Propagation in Buried-Hill Reservoirs
 
-01-SET.p2dat：	Geometry and particle generation: model size, particle radii, porosity and initial packing.
+Manuscript title:
+Constraint effect of natural fracture effectiveness on hydraulic fracture propagation
+in buried hill reservoirs of the Bohai Sea
 
-02-Contact.p2dat：	Contact models and micro-parameters: stiffness, strength and friction for different materials.
+Authors:
+Kang Yan a,*
+Denglin Han a,**
+Chenchen Wang a
+Lijuan Wang a
+Hao Du a
+Chaobin Zhu a
+Binyu Ma a
 
-03-Rongshi.p2dat：	Rock-state saving: stores a consistent “base” bonded-rock sample.
+Affiliation:
+a Yangtze University, School of Geosciences, Wuhan, Hubei, China
 
-04-Dakong.p2dat：	Drilling / cavity creation near the sample centre for flow boundary conditions.
+* First author. E-mail address: 2022730043@yangtzeu.edu.cn (K. Yan)
+** Corresponding author. E-mail address: handl@yangtzeu.edu.cn (D. Han)
 
-05-Daxi.p2dat：	Darcy flow loading and calculation: flow boundary, cycling and history recording.
+Contact E-mail addresses:
+2022730043@yangtzeu.edu.cn (K. Yan)
+handl@yangtzeu.edu.cn (D. Han)
+wcc1220@163.com (C. Wang)
+2629434067@qq.com (L. Wang)
+duhao11@hotmail.com (H. Du)
+zhuchaobin2022@163.com (C. Zhu)
+mabinyu@yangtzeu.edu.cn (B. Ma)
 
-crack_num.p2dat：	Fracture statistics: counts bond-break events (tension vs shear, different bond types).
+------------------------------------------------------------
+1. Purpose of the program
+------------------------------------------------------------
 
-fracture.p2dat：	Floater elimination and packing stabilization before flow and fracturing.
+This program package contains a set of PFC2D scripts used to simulate hydraulic fracture
+propagation in metamorphic buried-hill reservoirs with different natural fracture
+effectiveness.
 
-dom.p2dat：	Domain (flow region) identification and outer-boundary detection.
+The simulations support the manuscript
+“Constraint effect of natural fracture effectiveness on hydraulic fracture propagation
+in buried hill reservoirs of the Bohai Sea”
+by reproducing the mechanical response and fracture evolution of three discrete element
+models:
 
-dom1.p2dat：	Pressure-field update and volume balance for coupled flow calculations.
+- Type A: fully filled natural fractures
+- Type B: partially filled natural fractures
+- Type C: unfilled natural fractures
 
-In practice, DOALL.p2dat is first executed to build and save the base model with a central cavity. Then 05-Daxi.p2dat is run to perform the Darcy flow and fracture evolution simulation.
-3. Geometry and Particle Generation (01-SET.p2dat)
-01-SET.p2dat defines the model dimensions, particle properties and the initial packing.
-1.1) Model dimensions and coordinates: A characteristic length L1 = 50 mm is used. The sample width and height are 0.5·L1 (approximately 25 mm × 25 mm). Upper, lower, left and right boundaries are defined accordingly. Ball_porosity, radius_min and radius_max control the initial particle size distribution and target porosity.
-2.2) Particle generation and compaction: The particles are generated and compacted using gravity and damping (a_damp) until a dense packing is obtained. The floater-elimination logic in fracture.p2dat is called to remove particles with too few contacts, which improves the mechanical stability of the assembly.
-3.3) Particle grouping: ball group commands are used to assign certain regions to specific groups (for example, a central “filling” group), while the remaining particles are treated as the rock matrix. This allows different contact properties or local modifications to be applied in later steps.
-4. Contact Models and Micro-Parameters (02-Contact.p2dat)
-02-Contact.p2dat assigns stiffness, strength and friction parameters to the particle assembly and sets up the relevant contact models (parallel bonds, flatjoints, smoothjoints, etc.).
-4.1) Material parameters: For different materials (e.g., metamorphic rock, sandstone), the script defines contact Young's modulus (emod), normal-to-shear stiffness ratio (kratio), tensile strength (ten), cohesion, friction angle (fa), bond gap and friction coefficient (fric).
-5.2) Contact and bond models: Using cmat and contact method bond, the script assigns linear, parallel-bond, flatjoint and smoothjoint models to ball–ball and ball–wall contacts, and maps the above parameters to each material combination.
-6.3) State saving: After assigning the contact parameters, the model is saved as 02-FJ-SJ-bond_Add, which is then used by 03-Rongshi.p2dat as the base bonded-rock sample.
-5. Rock-State Saving and Cavity Creation (03-Rongshi.p2dat and 04-Dakong.p2dat)
-7.1) 03-Rongshi.p2dat: Restores 02-FJ-SJ-bond_Add and saves it as 03-Rongshi. This file represents the reference bonded-rock sample before introducing flow-specific modifications.
-8.2) 04-Dakong.p2dat: Restores 03-Rongshi and deletes particles within a given radius around the sample centre. This operation drills a cavity or “wellbore” that later serves as a flow boundary. The updated model is saved as 04-Dakong.
-6. Darcy Flow Loading and Boundary Conditions (05-Daxi.p2dat)
-05-Daxi.p2dat is the core Darcy-flow script. It applies flow boundaries, controls loading, and records histories.
-9.1) Model restore and wall reset: The script restores the 04-Dakong state and deletes existing walls, preparing for the application of new boundary conditions.
-10.2) Loading and strength-related parameters: Using loading_rate and related coefficients (xishu_e, xishu_s), the script sets upper bounds for stiffness and strength (emod_max, pb_emod_max, pb_ten_m, pb_ten_c) so that different experimental conditions can be matched.
-11.3) Flow boundary and time-step settings: A function such as flow_bc_circle is called to apply a flow boundary at the central cavity. The gap_mul parameter adjusts the relation between fracture aperture and flow rate. The script defines the time step, mechanical time and several histories (e.g., time, flow-related variables, and crack_num), runs a specified number of cycles, and finally saves the model as darcy_test.
-7. Domain Identification and Pressure Update (dom.p2dat and dom1.p2dat)
-dom.p2dat and dom1.p2dat form a FISH toolkit for flow-domain identification and pressure/volume updates.
-12.1) dom.p2dat: By scanning all contacts, the script builds connectivity information and groups particles that are connected into “domains”. The domain with the largest number of particles is treated as the outer domain, representing the external or infinite boundary region.
-13.2) dom1.p2dat: For each domain, a pressure is defined and updated. For each contact between domains, the code calculates a pipe flow rate based on the pressure difference, an effective permeability factor and the contact aperture. The associated volume changes are accumulated for the two domains to enforce global volume balance. Pressure gradients are then converted into equivalent forces acting on the particles, enabling fully coupled fluid–solid interaction.
-8. Fracture Statistics and Floater Removal (crack_num.p2dat and fracture.p2dat)
-14.1) crack_num.p2dat: This script tracks bond-break events in BPM/CBM/FJM/SJM contacts during the simulation. It identifies the contact model (linearcbond, linearpbond, flatjoint, smoothjoint, etc.), distinguishes between tensile and shear failures, and accumulates separate counters for each type. The fragment and ball-result logic is used to record fragment IDs. Global variables such as crack_num are exposed so that they can be stored as histories in 05-Daxi.p2dat.
-15.2) fracture.p2dat: Despite its name, this script mainly implements the floater-elimination algorithm. Functions such as flt_eliminate and flt_num identify particles with fewer than a specified number of contacts and adjust or remove them. Internal counters track the number of floating particles, active particles and contact forces. This procedure produces a denser, mechanically more realistic packing and reduces numerical noise in later flow and fracture simulations.
-9. Usage Notes and Recommendations
-16.1) Recommended execution sequence
-Step 1: Run DOALL.p2dat to build the geometry, assign contacts, save the rock state and drill the central cavity (ending with the 04-Dakong state).
-Step 2: Run 05-Daxi.p2dat to apply flow boundary conditions, perform Darcy flow and fracture evolution, and save the final darcy_test state along with history curves.
-17.2) Micro-parameter tuning
-To match different confining stresses or loading paths, adjust emod, cohesion and ten in 02-Contact.p2dat. To promote more tensile or shear fracture, reduce the corresponding strength parameters. Flow sensitivity can be controlled using the permeability factors in dom1.p2dat and parameters such as gap_mul in 05-Daxi.p2dat.
-18.3) Post-processing
-Histories typically include time, flow-related quantities (e.g., cumulative flow, pressure difference) and the number of fractures. It is recommended to export these data to text or spreadsheet files and analyze them with Python or MATLAB, for example to obtain permeability–time curves, fracture-count–strain curves, and the evolving proportion of tensile versus shear fractures.
-19.4) Use as project and paper documentation
-This English Word document can serve as both the user manual for the PFC2D Darcy-flow and fracture case and, after further polishing, as the basis for a “Numerical Model and Methods” section in a journal manuscript.
-Appendix: Full .p2dat Script Listings
-The following sections list the complete contents of all .p2dat files included in this project, for reference and archiving.
+The scripts combine several contact/bond models (LCM, SJM, FJM, PBM) to represent
+heterogeneous mechanical connections among pores, fillings and matrix, and implement a
+coupled Darcy-type flow formulation with fracture statistics.
+
+------------------------------------------------------------
+2. Software and system requirements
+------------------------------------------------------------
+
+- Discrete element code:
+  PFC2D version 5.00.40 (Itasca Consulting Group, Inc.)
+
+- Operating system:
+  Microsoft Windows (tested under Windows 10 x64)
+
+- Hardware:
+  Standard workstation; no special hardware is required for the provided small test case.
+
+------------------------------------------------------------
+3. Package contents
+------------------------------------------------------------
+
+The compressed archive contains the following main items:
+
+(1) Documentation
+- PFC2D_Darcy_Fracture_User_Manual_and_Code_Documentation.pdf
+  User manual and code documentation describing the model setup, script structure,
+  input/output files, and instructions for running the simulations.
+
+(2) Source code (PFC2D scripts) – folder "code/"
+- code/DOALL.p2dat      – master control script
+- code/01-SET.p2dat     – geometry and particle generation
+- code/02-Contact.p2dat – contact models and micro-parameters
+- code/03-Rongshi.p2dat – rock-state saving
+- code/04-Dakong.p2dat  – cavity / wellbore creation
+- code/05-Daxi.p2dat    – Darcy flow loading and coupled simulation
+- code/crack_num.p2dat  – fracture (bond-break) statistics
+- code/fracture.p2dat   – floater elimination and packing stabilization
+- code/dom.p2dat        – flow-domain (region) identification
+- code/dom1.p2dat       – pressure update and volume balance
+
+(3) Test data – folder "test_data/"
+- Small input/model files needed to run a compact test case that demonstrates the
+  workflow described in the manuscript.
+
+(4) Test output – folder "test_output/"
+- Example output files generated from the test data, including:
+  - Selected PFC2D history exports (e.g., time vs. pressure, flow rate, fracture count)
+  - Final model save(s), if applicable
+  These files allow users to verify that their run reproduces the same or very similar
+  results.
+
+No executable (.exe) files are provided, in accordance with the Computers & Geosciences
+guidelines.
+
+------------------------------------------------------------
+4. Quick-start instructions (test case)
+------------------------------------------------------------
+
+1) Copy all files and folders from the archive into a working directory accessible
+   to PFC2D.
+
+2) Start PFC2D (version 5.00.40) and set the working directory to this location.
+
+3) In the PFC2D command line, run the master script to build the base model and cavity:
+
+   call code/DOALL.p2dat
+
+   This generates the bonded-rock sample with the drilled cavity (wellbore) as used for
+   the Darcy-flow stage.
+
+4) Then run the Darcy-flow simulation script:
+
+   call code/05-Daxi.p2dat
+
+   This script:
+   - Restores the cavity model
+   - Applies flow boundary conditions
+   - Calls the domain and pressure-update routines
+   - Tracks fracture (bond-break) statistics via crack_num.p2dat
+   - Records histories such as time, flow-related variables, and total fracture count
+
+5) After the simulation finishes, export histories and compare them to the reference
+   files in "test_output/" to check that the program runs correctly.
+
+More detailed step-by-step instructions are provided in:
+PFC2D_Darcy_Fracture_User_Manual_and_Code_Documentation.pdf
+
+------------------------------------------------------------
+5. Notes and limitations
+------------------------------------------------------------
+
+- The provided test data set is intentionally small to avoid download issues and to
+  allow reasonably fast runs on standard hardware.
+
+- For full-scale production runs or alternative parameter sets (e.g., different
+  confining pressures or fracture effectiveness types), the user may adapt the
+  micro-parameters in 02-Contact.p2dat and the flow-related parameters in 05-Daxi.p2dat,
+  dom.p2dat and dom1.p2dat.
+
+- Any modifications used to generate new results should be documented by the user when
+  reproducing or extending the study.
+
+------------------------------------------------------------
+6. Contact
+------------------------------------------------------------
+
+Questions regarding the program code or its usage can be addressed to:
+
+First author:
+Kang Yan
+Yangtze University, School of Geosciences, Wuhan, Hubei, China
+E-mail: 2022730043@yangtzeu.edu.cn
+
+Corresponding author:
+Denglin Han
+Yangtze University, School of Geosciences, Wuhan, Hubei, China
+E-mail: handl@yangtzeu.edu.cn

@@ -1,7 +1,6 @@
 # Bohai-Fracture-DEM
 Input files and scripts for DEM/PFC modeling of fracture effectiveness in buried-hill reservoirs.
 
-PFC2D Darcy Flow and Fracture Simulation Scripts – Documentation
 1. Project Files and Call Structure
 This PFC2D project consists of a set of .p2dat scripts for building a bonded-particle rock sample, applying Darcy-type flow, and tracking fracture evolution. The main scripts and their roles are summarized below.
 File name	Main function

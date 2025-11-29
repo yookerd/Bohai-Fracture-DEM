@@ -1,0 +1,5 @@
+restore 03-Rongshi
+
+ball delete range annulus center 0 0 radius 0.0 0.004
+
+save 04-Dakong

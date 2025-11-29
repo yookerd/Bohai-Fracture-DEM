@@ -1,0 +1,214 @@
+set echo off
+[press_max = 0.0]
+def pressure  
+   array pvec(2)   
+    ;存储二维向量信息的数组
+    ;将压力绘制成具有不同半径的填充圆
+    ;首先，获得最大压力
+   command
+       scalar delete ;删除之前定义的标量（scalar）
+   endcommand   
+   pnt       = dom_head
+   loop while pnt # null;遍历颗粒系统中的所有颗粒
+     if pnt # outer_domain
+        press_max = math.max(press_max,memory(pnt+DOM_PRESS))
+     endif
+     pnt = memory(pnt)
+   endloop
+   if press_max = 0.0
+     exit
+   endif
+   pnt = dom_head
+   num_domain=0
+   loop while pnt # null
+     if pnt # outer_domain
+       dom = pnt
+       set_dom_coords
+       vec(1) = memory(pnt+DOM_X)
+       vec(2) = memory(pnt+DOM_Y)
+       rad = 0.004 * memory(pnt+DOM_PRESS) / press_max
+       if rad > 0.0001
+          vvvv=vector(vec(1),vec(2))
+          command
+           scalar create @vvvv @rad           
+          endcommand
+       endif
+       num_domain=num_domain+1
+     endif
+     pnt = memory(pnt)
+   endloop
+end
+def flow_props ;设置流计算参数
+  loop foreach cp contact.list
+    if contact.extra(cp,FLOW_DOM1) # null
+       contact.extra(cp,FLOW_AP_ZERO) = ap_zero
+       contact.extra(cp,FLOW_PERM)    = perm
+    endif   
+  endLoop
+end
+def flow_run ; 控制流量计算
+  whilestepping   
+    dddtime=mech.age-time111
+    if dddtime < flow_dt;flow_dt控制流体计算时间间隔
+       exit
+    endif
+    time111=mech.age
+;  settime0=mech.age
+; n_rep = n_rep + 1
+;  if n_rep < 10
+;    exit
+;  endif
+;  n_rep=0
+;--- Flow in pipes ...
+  m=0
+  loop foreach cp contact.list      
+      if contact.extra(cp,FLOW_ACTIVE) = 1
+        m=m+1
+        b1    = contact.end1(cp)
+        b2    = contact.end2(cp)
+        rsum  = ball.radius(b1) + ball.radius(b2)
+        dom1  = contact.extra(cp,FLOW_DOM1)
+        dom2  = contact.extra(cp,FLOW_DOM2)
+        pdiff = memory(dom1+DOM_PRESS) - memory(dom2+DOM_PRESS)
+        per_fac = contact.extra(cp,FLOW_PERM)
+        fnorm = contact.force.normal(cp)
+        aper0 = contact.extra(cp,FLOW_AP_ZERO)
+        if fnorm > 0.0
+          aper = aper0 * Fap_zero / (fnorm + Fap_zero)
+        else
+          if gap_mul = 0.0
+            aper = aper0
+          else
+            xdif = ball.pos.x(b1) - ball.pos.x(b2)
+            ydif = ball.pos.y(b1) - ball.pos.y(b2)
+            gap  = math.sqrt(xdif*xdif+ydif*ydif) - ball.radius(b1) - ball.radius(b2)
+            aper = aper0 + gap_mul * gap
+          endif
+        endif
+        qpipe = pdiff * per_fac * aper^3 / rsum
+        dvol  = qpipe * flow_dt
+        ;command
+           ;list @qpipe @dvol @aper0 @rsum  @fnorm @cp 
+        ;endcommand
+        memory(dom1+DOM_VSUM) = memory(dom1+DOM_VSUM) - dvol
+        memory(dom2+DOM_VSUM) = memory(dom2+DOM_VSUM) + dvol
+      endif  
+  endLoop
+  
+ 
+;更新流域内压力
+  dom = dom_head
+  loop while dom # null
+    if dom # outer_domain
+      if memory(dom+DOM_FIX) = 0
+        xdom = memory(dom+DOM_X)
+        ydom = memory(dom+DOM_Y)
+        delta_p = memory(dom+DOM_VSUM) * bulk_w ; assume vol = 1                
+        memory(dom+DOM_PRESS) = memory(dom+DOM_PRESS) + delta_p
+       endif
+    endif
+    memory(dom+DOM_VSUM) = 0.0
+    dom = memory(dom)
+  endLoop
+  pressure
+;流体压力施加到球上
+  loop foreach bp ball.list
+    ball.force.app.x(bp) = 0.0
+    ball.force.app.y(bp) = 0.0  
+  endloop
+  
+  dom = dom_head
+  loop while dom # null
+    if dom # outer_domain
+       ppp = memory(dom+DOM_PRESS)
+       iadd = memory(dom+DOM_BALL_LIST)
+       bstart = memory(iadd+1)
+       loop while iadd # null
+         next = memory(iadd)
+         Abp  = memory(iadd+1)
+         if next = null
+           Bbp = bstart
+         else
+           Bbp = memory(next+1)
+         endif
+         if abp #null
+         if Bbp # null
+         Arad = ball.radius(Abp)
+         Brad = ball.radius(Bbp)
+         dpr = ppp / (Arad + Brad)
+         f1 = (ball.pos.y(Abp) - ball.pos.y(Bbp)) * dpr
+         f2 = (ball.pos.x(Bbp) - ball.pos.x(Abp)) * dpr
+         ball.force.app.x(Abp) = ball.force.app.x(Abp) + f1 * Arad
+         ball.force.app.y(Abp) = ball.force.app.y(Abp) + f2 * Arad
+         ball.force.app.x(Bbp) = ball.force.app.x(Bbp) + f1 * Brad
+         ball.force.app.y(Bbp) = ball.force.app.y(Bbp) + f2 * Brad
+         endif
+         endif
+         iadd = next
+       endloop
+     endif
+    dom = memory(dom)
+  endLoop
+  
+end
+def flow_bc  ;设置流计算边界条件
+  ; Range specified with (x1_bc .. x2_bc) and (y1_bc .. y2_bc)
+  ; flow_set:  1  .. fix pressure
+  ;            2  .. free pressure
+  ;            3  .. set pressure to p_given
+  dom = dom_head
+  loop while dom # null
+    if dom # outer_domain
+      set_dom_coords
+      xdom = memory(dom+DOM_X)
+      ydom = memory(dom+DOM_Y)
+      if xdom > x1_bc
+        if xdom < x2_bc
+          if ydom > y1_bc
+            if ydom < y2_bc
+              caseOf flow_set
+                case 1
+                  memory(dom+DOM_FIX) = 1
+                case 2
+                  memory(dom+DOM_FIX) = 0
+                case 3
+                  memory(dom+DOM_PRESS) = p_given                 
+              endCase
+            endif
+          endif
+        endif
+      endif
+    endif
+    dom = memory(dom)
+  endLoop
+end
+
+def flow_bc_circle(xc0,yc0,rr0) ;设置流计算边界条件
+  ; Range specified with (x1_bc .. x2_bc) and (y1_bc .. y2_bc)
+  ; flow_set:  1  .. fix pressure
+  ;            2  .. free pressure
+  ;            3  .. set pressure to p_given
+  dom = dom_head
+  loop while dom # null
+    if dom # outer_domain
+      set_dom_coords
+      xdom = memory(dom+DOM_X)
+      ydom = memory(dom+DOM_Y)
+      ddd=math.sqrt((xdom-xc0)^2+(ydom-yc0)^2)
+      if ddd < rr0
+              caseOf flow_set
+                case 1
+                  memory(dom+DOM_FIX) = 1
+                case 2
+                  memory(dom+DOM_FIX) = 0
+                case 3
+                  memory(dom+DOM_PRESS) = p_given                  
+              endCase
+      endif 
+    endif
+    dom = memory(dom)
+  endLoop
+end
+
+set echo on
+save dom1

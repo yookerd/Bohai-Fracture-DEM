@@ -1,0 +1,6 @@
+new
+call 01-SET.p2dat
+call 02-Contact.p2dat
+call 03-Rongshi.p2dat
+call 04-Dakong.p2dat
+return

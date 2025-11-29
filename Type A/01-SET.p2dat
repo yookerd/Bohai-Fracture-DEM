@@ -1,0 +1,63 @@
+new
+domain extent -2.6 2.6 condition destroy
+def setup
+ L1=50e-3 
+ height=L1*0.5            
+ height_=-L1*0.5 
+ width_left=-L1*0.5                 
+ width_right=L1*0.5 
+ fc=0.0                
+ a_damp=0.1              
+ p_density=2000
+ 
+ Ball_porosity = 0.08
+ radius_min= 0.004*L1
+ radius_max=[radius_min]*1.66
+end
+@setup
+
+set random 1087;
+
+wall generate box [-0.5*L1] [0.5*L1] [-0.5*L1] [0.5*L1] ...
+  expand 1.5
+wall property kn=1e11 ks=0.0 fric 0.0
+
+ball distribute porosity [Ball_porosity]  radius [radius_min]  [radius_max] ...
+                    box [width_left] [width_right] [height_] [height] ...
+                    group 'rock'
+                    
+ball attribute density 2700.0 damp 0.7 ;range group 'rock'
+
+cmat default model linear method deform emod 100e6 kratio 1.5 ...
+                          property fric 0.0 dp_nratio 0.0 dp_sratio 0.0
+
+;set timestep scale 2
+cycle 5000 calm 100
+;ball delete range y -100 @height_
+;ball delete range y  @height 100
+set timestep auto
+solve aratio 1e-5
+
+calm 
+
+call fracture.p2dat
+[flt_remain = 0.0]
+[flt_def = 3]
+@flt_eliminate
+
+ball attribute displacement multiply 0.0 rotation multiply 0.0 ...
+               velocity multiply 0.0 spin multiply 0.0
+calm
+
+save 00-int
+
+;ball group 'rock'
+ball group 'tianchong' range ...
+             cylinder end1 -0.0125 -0.0125 end2 0.0125  0.0125  radius 0.001
+
+
+;ball group 'rock' range not group 'tianchong'
+
+save 01-SET
+
+
